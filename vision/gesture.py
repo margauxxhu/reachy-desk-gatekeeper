@@ -17,9 +17,10 @@ _hands = mp.solutions.hands.Hands(
 )
 
 # Fraction of frame height — wrist must be above this to count as raised
-RAISE_THRESHOLD = 0.4
+# Camera looks up at user; raised wrist sits in roughly the top 50% of frame
+RAISE_THRESHOLD = 0.5
 # How many consecutive frames with hand raised to confirm the gesture
-CONFIRM_FRAMES = 3
+CONFIRM_FRAMES = 2
 
 
 def detect_hand_raise(
