@@ -9,11 +9,15 @@ You're at your desk working. Someone in your home wants to know if they can ente
 They send a trigger — via Discord or iMessage — and Reachy Mini:
 
 1. **Searches for your face** — sweeps left, centre, and right using its onboard camera
-2. **Locks onto you** — looks directly at your face and waits up to 8 seconds
-3. **Reads your signal** — detects whether you nod twice (the "busy" signal)
+2. **Locks onto you** — looks directly at your face, antennas perk up to signal "I see you — respond now"
+3. **Waits 8 seconds for your signal** — watches for a fist gesture
 4. **Reports back** on the same channel that triggered it:
-   - 🔴 **Do Not Disturb** — two nods detected, you're in a call or focused
-   - 🟢 **Come On In** — no signal, you're available
+   - 🟢 **Come On In** — fist raised toward the camera: you're free, they can enter
+   - 🔴 **Not yet** — no gesture after 8 seconds: default is busy, give them a moment
+
+**The signal rule is simple:**
+- ✊ **Raise a fist** = available, come in
+- **Do nothing** = busy / not now (passive default — no action needed when you're in a call)
 
 No need to touch your phone or break your focus. The interaction is entirely physical.
 
@@ -40,8 +44,8 @@ desk-gatekeeper/
 ├── bot/
 │   └── commands.py          # /knock Discord slash command
 ├── vision/
-│   ├── face_detection.py    # OpenCV Haar-cascade face detection via Reachy's camera
-│   └── gesture.py           # Nod detection via face Y-position tracking
+│   ├── face_detection.py    # MediaPipe BlazeFace + Haar fallback face detection
+│   └── gesture.py           # Fist gesture detection via MediaPipe Hands
 └── robot/
     └── movements.py         # Reachy movement routines (search, gaze hold, reactions)
 ```
@@ -104,7 +108,7 @@ Create a Shortcut on the triggering person's iPhone:
 
 The HTTP server returns:
 ```json
-{ "found": true, "busy": false, "message": "🟢 Come On In — they're available!" }
+{ "found": true, "busy": false, "message": "🟢 Come On In — they're free, go ahead!" }
 ```
 
 ### 6. Run
@@ -116,15 +120,16 @@ nohup /venvs/apps_venv/bin/python main.py > gatekeeper.log 2>&1 &
 
 Both the Discord bot and HTTP server start together in the same process.
 
-## How Nod Detection Works
+## How Gesture Detection Works
 
-Frames are sampled at ~5 fps for 8 seconds. The normalised Y-position of the largest detected face is tracked over time. A nod is counted when the Y-centre drops below baseline by more than `NOD_THRESHOLD` (6% of frame height) and then recovers — matching the natural down-then-up motion of a head nod.
+**Face detection** uses MediaPipe BlazeFace (with Haar cascade as fallback). BlazeFace handles angled and bowed faces reliably — it will find you even when you're looking at your screen, not at Reachy.
+
+**Fist detection** uses MediaPipe Hands sampled at ~10 fps for 8 seconds. A fist is confirmed when 3 or more of the 4 fingers have their tip curled below their middle knuckle for 2 consecutive frames. This works at any position in frame — just raise your fist toward the camera.
 
 Tune in `vision/gesture.py`:
 
 ```python
-NOD_THRESHOLD = 0.06   # fraction of frame height per nod
-EMA_ALPHA     = 0.4    # smoothing (higher = more responsive, noisier)
+CONFIRM_FRAMES = 2   # consecutive frames required to confirm the fist
 ```
 
 Scan sweep positions in `robot/movements.py` can be adjusted if Reachy's field of view doesn't cover your usual seating position.
@@ -133,5 +138,5 @@ Scan sweep positions in `robot/movements.py` can be adjusted if Reachy's field o
 
 - **Sound** — `robot.media.play_sound("file.wav")` is available for audio feedback
 - **Auto-trigger** — replace the Discord command with a continuous polling loop
-- **Face recognition** — swap the Haar cascade for a model that identifies specific people
-- **Other gestures** — thumbs up/down, hand raise — extend `vision/gesture.py`
+- **Face recognition** — add a recognition layer on top of BlazeFace to identify specific people
+- **Other gestures** — swap `vision/gesture.py` for thumbs up, open palm, or any MediaPipe Hands landmark pattern
