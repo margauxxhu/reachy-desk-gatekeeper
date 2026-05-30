@@ -1,6 +1,10 @@
 # Discord bot
 discord.py>=2.3.2
 
+# HTTP server (iMessage / home-network rail)
+fastapi>=0.111.0
+uvicorn>=0.29.0
+
 # Computer vision (OpenCV already installed in reachy_mini_env)
 opencv-python>=4.9.0
 

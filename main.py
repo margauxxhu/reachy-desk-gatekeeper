@@ -15,6 +15,7 @@ from discord import app_commands
 from dotenv import load_dotenv
 
 from bot.commands import register_commands
+from api.server import build_server
 from vision.face_detection import init_media
 
 load_dotenv()
@@ -26,7 +27,6 @@ log = logging.getLogger(__name__)
 
 
 def _connect_robot():
-    """Return a live ReachyMini connection, or None if unavailable."""
     host = os.getenv("REACHY_HOST", "localhost")
     port = int(os.getenv("REACHY_PORT", "8000"))
     try:
@@ -40,15 +40,16 @@ def _connect_robot():
 
 
 class GatekeeperBot(discord.Client):
-    def __init__(self, robot, media) -> None:
+    def __init__(self, robot, media, lock: asyncio.Lock) -> None:
         intents = discord.Intents.default()
         super().__init__(intents=intents)
         self.robot = robot
         self.media = media
+        self.lock = lock
         self.tree = app_commands.CommandTree(self)
 
     async def setup_hook(self) -> None:
-        register_commands(self.tree, self.robot, self.media)
+        register_commands(self.tree, self.robot, self.media, self.lock)
 
         guild_id = os.getenv("DISCORD_GUILD_ID")
         if guild_id:
@@ -58,7 +59,7 @@ class GatekeeperBot(discord.Client):
             log.info("Slash commands synced to guild %s", guild_id)
         else:
             await self.tree.sync()
-            log.info("Slash commands synced globally (may take up to 1 hour to propagate)")
+            log.info("Slash commands synced globally")
 
     async def on_ready(self) -> None:
         log.info("Logged in as %s (id=%s)", self.user, self.user.id)
@@ -76,22 +77,24 @@ async def main() -> None:
         raise SystemExit("DISCORD_TOKEN not set — copy .env.example to .env and fill it in.")
 
     robot = _connect_robot()
+    media = robot.media if robot is not None else init_media()
+    lock = asyncio.Lock()
 
-    # Reuse the MediaManager already created by ReachyMini to avoid two
-    # GStreamer pipelines competing for the same IPC camera endpoint.
     if robot is not None:
-        media = robot.media
         log.info("Using Reachy's onboard camera via robot.media")
     else:
-        media = init_media()
-        log.info("No robot connection — initializing standalone camera pipeline")
+        log.info("No robot — initializing standalone camera pipeline")
 
-    async with GatekeeperBot(robot, media) as bot:
-        try:
-            await bot.start(token)
-        finally:
-            if robot is None:
-                media.close()
+    http_server = build_server(robot, media, lock)
+    log.info("HTTP server will listen on 0.0.0.0:8080")
+
+    bot = GatekeeperBot(robot, media, lock)
+
+    async with bot:
+        await asyncio.gather(
+            bot.start(token),
+            http_server.serve(),
+        )
 
 
 if __name__ == "__main__":
