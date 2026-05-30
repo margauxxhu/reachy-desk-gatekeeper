@@ -10,10 +10,10 @@ from vision.face_detection import detect_in_frame
 
 log = logging.getLogger(__name__)
 
-# Fraction of image height that counts as a nod dip
-NOD_THRESHOLD = 0.06
+# Fraction of image height that counts as a nod dip — lower = more sensitive
+NOD_THRESHOLD = 0.04
 # EMA smoothing factor (0=no smoothing, 1=instant)
-EMA_ALPHA = 0.4
+EMA_ALPHA = 0.3
 
 
 def detect_nods(

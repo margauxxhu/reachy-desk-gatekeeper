@@ -25,24 +25,46 @@ _SCAN_POSITIONS = [
 ]
 
 
-def search_for_face(robot: ReachyMini, media: MediaManager) -> Optional[DetectionResult]:
-    """Sweep left→centre→right, return DetectionResult on first face found or None."""
+def search_for_face(
+    robot: ReachyMini,
+    media: MediaManager,
+    frames_per_position: int = 3,
+    frame_interval: float = 0.2,
+) -> Optional[DetectionResult]:
+    """Sweep left→centre→right, sampling multiple frames per stop.
+
+    Taking several frames per position makes detection robust against
+    single-frame misses from blur or Haar-cascade variance.
+    """
     log.info("Searching for face...")
-    robot.goto_target(antennas=_ANTENNAS_ALERT, duration=0.3)
+
+    # Wait for camera pipeline to produce its first frame (up to 10s after startup)
+    deadline = time.monotonic() + 10.0
+    while time.monotonic() < deadline:
+        if media.get_frame() is not None:
+            break
+        time.sleep(0.2)
+    else:
+        log.warning("Camera not ready after 10s — aborting search")
+        return None
+
+    robot.goto_target(antennas=_ANTENNAS_IDLE, duration=0.3)
 
     for x, y, z in _SCAN_POSITIONS:
         try:
             robot.look_at_world(x=x, y=y, z=z, duration=0.5)
         except Exception as exc:
             log.warning("look_at_world failed: %s", exc)
-        time.sleep(0.7)  # wait for head to settle + camera to stabilise
+        time.sleep(0.6)  # let head settle before sampling
 
-        frame = media.get_frame()
-        if frame is not None:
-            result = detect_in_frame(frame)
-            if result.face_detected:
-                log.info("Face found at scan position (%.1f, %.1f, %.1f)", x, y, z)
-                return result
+        for _ in range(frames_per_position):
+            frame = media.get_frame()
+            if frame is not None:
+                result = detect_in_frame(frame)
+                if result.face_detected:
+                    log.info("Face found at scan position (%.1f, %.1f, %.1f)", x, y, z)
+                    return result
+            time.sleep(frame_interval)
 
     log.info("No face found after full scan")
     return None

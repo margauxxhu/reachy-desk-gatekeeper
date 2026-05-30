@@ -65,24 +65,26 @@ async def run_knock(robot, media: MediaManager, lock: asyncio.Lock) -> KnockResu
         if robot is not None and face_center is not None:
             await loop.run_in_executor(None, hold_gaze, robot, face_center)
 
-        busy = await loop.run_in_executor(
+        # Two nods = come in (active yes). No nod = busy (passive default).
+        nodded = await loop.run_in_executor(
             None, detect_nods, media, float(NOD_WINDOW_SECONDS)
         )
+        available = nodded
 
         # ── 3. Robot reacts ───────────────────────────────────────────────────
         if robot is not None:
             await loop.run_in_executor(
-                None, react_busy if busy else react_available, robot
+                None, react_available if available else react_busy, robot
             )
 
-        if busy:
+        if available:
             return KnockResult(
                 found=True,
-                busy=True,
-                message="🔴 Do Not Disturb — they're in a call. Please wait.",
+                busy=False,
+                message="🟢 Come On In — they nodded, go ahead!",
             )
         return KnockResult(
             found=True,
-            busy=False,
-            message="🟢 Come On In — they're available!",
+            busy=True,
+            message="🔴 Not yet — give them a moment.",
         )
