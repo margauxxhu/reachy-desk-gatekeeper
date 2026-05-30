@@ -8,12 +8,12 @@ from typing import Optional, Tuple
 from reachy_mini.media.media_manager import MediaManager
 
 from vision.face_detection import capture_and_detect, DetectionResult
-from vision.gesture import detect_nods
-from robot.movements import search_for_face, hold_gaze, react_busy, react_available
+from vision.gesture import detect_hand_raise
+from robot.movements import search_for_face, hold_gaze, react_busy, react_available, reset_head
 
 log = logging.getLogger(__name__)
 
-NOD_WINDOW_SECONDS = 8
+GESTURE_WINDOW_SECONDS = 8
 
 
 @dataclass
@@ -54,24 +54,26 @@ async def run_knock(robot, media: MediaManager, lock: asyncio.Lock) -> KnockResu
                 face_result = None
 
         if face_result is None:
+            if robot is not None:
+                await loop.run_in_executor(None, reset_head, robot)
             return KnockResult(
                 found=False,
                 busy=False,
                 message="Couldn't find the user. They may be away from their desk.",
             )
 
-        # ── 2. Lock gaze and wait for nod ────────────────────────────────────
+        # ── 2. Lock gaze and wait for hand raise ─────────────────────────────
         face_center = _largest_face_center(face_result)
         if robot is not None and face_center is not None:
             await loop.run_in_executor(None, hold_gaze, robot, face_center)
 
-        # Two nods = come in (active yes). No nod = busy (passive default).
-        nodded = await loop.run_in_executor(
-            None, detect_nods, media, float(NOD_WINDOW_SECONDS)
+        # Hand raise = come in (active yes). No gesture = busy (passive default).
+        raised = await loop.run_in_executor(
+            None, detect_hand_raise, media, float(GESTURE_WINDOW_SECONDS)
         )
-        available = nodded
+        available = raised
 
-        # ── 3. Robot reacts ───────────────────────────────────────────────────
+        # ── 3. Robot reacts and resets head ──────────────────────────────────
         if robot is not None:
             await loop.run_in_executor(
                 None, react_available if available else react_busy, robot
@@ -81,7 +83,7 @@ async def run_knock(robot, media: MediaManager, lock: asyncio.Lock) -> KnockResu
             return KnockResult(
                 found=True,
                 busy=False,
-                message="🟢 Come On In — they nodded, go ahead!",
+                message="🟢 Come On In — they're free, go ahead!",
             )
         return KnockResult(
             found=True,

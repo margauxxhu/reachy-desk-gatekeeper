@@ -67,6 +67,7 @@ def search_for_face(
             time.sleep(frame_interval)
 
     log.info("No face found after full scan")
+    reset_head(robot)
     return None
 
 
@@ -80,17 +81,28 @@ def hold_gaze(robot: ReachyMini, face_center: Tuple[int, int]) -> None:
     robot.goto_target(antennas=_ANTENNAS_ALERT, duration=0.3)
 
 
+def reset_head(robot: ReachyMini) -> None:
+    """Return head to neutral forward position and antennas to idle."""
+    try:
+        robot.look_at_world(x=0.5, y=0.0, z=0.05, duration=0.5)
+    except Exception as exc:
+        log.warning("reset_head look_at_world failed: %s", exc)
+    robot.goto_target(antennas=_ANTENNAS_IDLE, duration=0.5)
+
+
 def react_busy(robot: ReachyMini) -> None:
-    """Two nods detected — signal busy with a slow antenna droop."""
+    """No hand raise — signal busy with a slow antenna droop, then reset head."""
     log.info("Reacting: busy")
     robot.goto_target(antennas=[-1.2, 1.2], duration=0.5)
     time.sleep(0.6)
     robot.goto_target(antennas=_ANTENNAS_IDLE, duration=0.8)
+    reset_head(robot)
 
 
 def react_available(robot: ReachyMini) -> None:
-    """No nods detected — signal available with a quick antenna perk."""
+    """Hand raise detected — signal available with a quick antenna perk, then reset head."""
     log.info("Reacting: available")
     robot.goto_target(antennas=_ANTENNAS_ALERT, duration=0.3)
     time.sleep(0.4)
     robot.goto_target(antennas=_ANTENNAS_INIT, duration=0.5)
+    reset_head(robot)
