@@ -27,17 +27,16 @@ def detect_hand_raise(
     duration: float = 8.0,
     sample_fps: float = 10.0,
 ) -> bool:
-    """Return True if wrist is above the face Y position for CONFIRM_FRAMES frames.
+    """Return True if the hand is pointing upward for CONFIRM_FRAMES consecutive frames.
 
-    Uses the face Y-centre from the search phase as the threshold so detection
-    is robust to any camera angle — raise your hand above your face to signal.
-    MediaPipe Y is 0 at top, 1 at bottom, so above face → wrist_y < face_y_norm.
+    Gesture: index fingertip (landmark 8) is above the wrist (landmark 0) in frame.
+    Works at any camera angle — no absolute position required.
     """
     interval = 1.0 / sample_fps
     deadline = time.monotonic() + duration
     consecutive = 0
 
-    log.info("Waiting for hand raise — face_y=%.3f (raise wrist above this)", face_y_norm)
+    log.info("Waiting for hand raise gesture (point hand upward)")
 
     while time.monotonic() < deadline:
         t0 = time.monotonic()
@@ -48,10 +47,13 @@ def detect_hand_raise(
             res = _hands.process(rgb)
 
             if res.multi_hand_landmarks:
-                wrist_y = res.multi_hand_landmarks[0].landmark[0].y
-                log.info("Hand detected — wrist_y=%.3f face_y=%.3f raised=%s streak=%d",
-                         wrist_y, face_y_norm, wrist_y < face_y_norm, consecutive)
-                if wrist_y < face_y_norm:
+                lm = res.multi_hand_landmarks[0].landmark
+                wrist_y = lm[0].y       # landmark 0 = wrist
+                fingertip_y = lm[8].y   # landmark 8 = index fingertip
+                pointing_up = fingertip_y < wrist_y
+                log.info("Hand detected — wrist_y=%.3f tip_y=%.3f pointing_up=%s streak=%d",
+                         wrist_y, fingertip_y, pointing_up, consecutive)
+                if pointing_up:
                     consecutive += 1
                     if consecutive >= CONFIRM_FRAMES:
                         log.info("Hand raise confirmed after %d frames", consecutive)
