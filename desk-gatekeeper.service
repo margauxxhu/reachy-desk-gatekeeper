@@ -1,0 +1,19 @@
+[Unit]
+Description=Desk Gatekeeper — Reachy Mini HRI bot
+After=network-online.target reachy-mini-daemon.service
+Wants=network-online.target
+Requires=reachy-mini-daemon.service
+
+[Service]
+Type=simple
+User=pollen
+WorkingDirectory=/home/pollen/desk-gatekeeper
+ExecStart=/venvs/apps_venv/bin/python main.py
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=desk-gatekeeper
+
+[Install]
+WantedBy=multi-user.target
