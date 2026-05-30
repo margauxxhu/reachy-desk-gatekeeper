@@ -27,16 +27,16 @@ def detect_hand_raise(
     duration: float = 8.0,
     sample_fps: float = 10.0,
 ) -> bool:
-    """Return True if the hand is pointing upward for CONFIRM_FRAMES consecutive frames.
+    """Return True if a raised fist is held for CONFIRM_FRAMES consecutive frames.
 
-    Gesture: index fingertip (landmark 8) is above the wrist (landmark 0) in frame.
-    Works at any camera angle — no absolute position required.
+    Gesture: make a fist (3+ fingertips curled below their PIP knuckles).
+    Works at any camera angle and position.
     """
     interval = 1.0 / sample_fps
     deadline = time.monotonic() + duration
     consecutive = 0
 
-    log.info("Waiting for hand raise gesture (point hand upward)")
+    log.info("Waiting for fist gesture")
 
     while time.monotonic() < deadline:
         t0 = time.monotonic()
@@ -48,15 +48,17 @@ def detect_hand_raise(
 
             if res.multi_hand_landmarks:
                 lm = res.multi_hand_landmarks[0].landmark
-                wrist_y = lm[0].y       # landmark 0 = wrist
-                fingertip_y = lm[8].y   # landmark 8 = index fingertip
-                pointing_up = fingertip_y < wrist_y
-                log.info("Hand detected — wrist_y=%.3f tip_y=%.3f pointing_up=%s streak=%d",
-                         wrist_y, fingertip_y, pointing_up, consecutive)
-                if pointing_up:
+                # Fist: each fingertip (8,12,16,20) curled below its PIP knuckle (6,10,14,18)
+                # Y increases downward, so curled = tip_y > pip_y
+                finger_pairs = [(8, 6), (12, 10), (16, 14), (20, 18)]
+                curled = sum(lm[tip].y > lm[pip].y for tip, pip in finger_pairs)
+                is_fist = curled >= 3
+                log.info("Hand detected — curled_fingers=%d/4 fist=%s streak=%d",
+                         curled, is_fist, consecutive)
+                if is_fist:
                     consecutive += 1
                     if consecutive >= CONFIRM_FRAMES:
-                        log.info("Hand raise confirmed after %d frames", consecutive)
+                        log.info("Fist confirmed after %d frames", consecutive)
                         return True
                 else:
                     consecutive = 0
