@@ -33,6 +33,15 @@ def _largest_face_center(result: DetectionResult) -> Optional[Tuple[int, int]]:
     return (u, v)
 
 
+def _face_y_norm(result: DetectionResult) -> float:
+    """Normalised Y-centre of the largest detected face (0=top, 1=bottom)."""
+    if not result.boxes or result.frame is None:
+        return 0.5
+    h_img = result.frame.shape[0]
+    x, y, w, h = max(result.boxes, key=lambda b: b[2] * b[3])
+    return (y + h / 2) / h_img
+
+
 async def run_knock(robot, media: MediaManager, lock: asyncio.Lock) -> KnockResult:
     """Core knock sequence. Shared by Discord and HTTP rails.
 
@@ -64,12 +73,14 @@ async def run_knock(robot, media: MediaManager, lock: asyncio.Lock) -> KnockResu
 
         # ── 2. Lock gaze and wait for hand raise ─────────────────────────────
         face_center = _largest_face_center(face_result)
+        face_y = _face_y_norm(face_result)
         if robot is not None and face_center is not None:
             await loop.run_in_executor(None, hold_gaze, robot, face_center)
 
         # Hand raise = come in (active yes). No gesture = busy (passive default).
+        # Threshold is the face Y so detection works at any camera angle.
         raised = await loop.run_in_executor(
-            None, detect_hand_raise, media, float(GESTURE_WINDOW_SECONDS)
+            None, detect_hand_raise, media, face_y, float(GESTURE_WINDOW_SECONDS)
         )
         available = raised
 

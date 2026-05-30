@@ -3,6 +3,7 @@
 import time
 import logging
 
+import cv2
 import mediapipe as mp
 
 from reachy_mini.media.media_manager import MediaManager
@@ -16,48 +17,49 @@ _hands = mp.solutions.hands.Hands(
     min_tracking_confidence=0.5,
 )
 
-# Fraction of frame height — wrist must be above this to count as raised
-# Camera looks up at user; raised wrist sits in roughly the top 50% of frame
-RAISE_THRESHOLD = 0.5
-# How many consecutive frames with hand raised to confirm the gesture
+# How many consecutive frames with hand above face to confirm the gesture
 CONFIRM_FRAMES = 2
 
 
 def detect_hand_raise(
     media: MediaManager,
+    face_y_norm: float,
     duration: float = 8.0,
     sample_fps: float = 10.0,
 ) -> bool:
-    """Return True if a raised hand is held for CONFIRM_FRAMES consecutive frames.
+    """Return True if wrist is above the face Y position for CONFIRM_FRAMES frames.
 
-    Raise = wrist landmark Y-coordinate above RAISE_THRESHOLD (top 40% of frame).
-    MediaPipe Y is 0 at top, 1 at bottom, so raised hand → small Y value.
+    Uses the face Y-centre from the search phase as the threshold so detection
+    is robust to any camera angle — raise your hand above your face to signal.
+    MediaPipe Y is 0 at top, 1 at bottom, so above face → wrist_y < face_y_norm.
     """
     interval = 1.0 / sample_fps
     deadline = time.monotonic() + duration
     consecutive = 0
+
+    log.info("Waiting for hand raise — face_y=%.3f (raise wrist above this)", face_y_norm)
 
     while time.monotonic() < deadline:
         t0 = time.monotonic()
 
         frame = media.get_frame()
         if frame is not None:
-            import cv2
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             res = _hands.process(rgb)
 
             if res.multi_hand_landmarks:
-                # wrist is landmark 0
                 wrist_y = res.multi_hand_landmarks[0].landmark[0].y
-                if wrist_y < RAISE_THRESHOLD:
+                log.info("Hand detected — wrist_y=%.3f face_y=%.3f raised=%s streak=%d",
+                         wrist_y, face_y_norm, wrist_y < face_y_norm, consecutive)
+                if wrist_y < face_y_norm:
                     consecutive += 1
-                    log.debug("Hand raised — wrist_y=%.3f, streak=%d", wrist_y, consecutive)
                     if consecutive >= CONFIRM_FRAMES:
                         log.info("Hand raise confirmed after %d frames", consecutive)
                         return True
                 else:
                     consecutive = 0
             else:
+                log.debug("No hand detected this frame")
                 consecutive = 0
 
         elapsed = time.monotonic() - t0
