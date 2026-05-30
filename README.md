@@ -1,6 +1,6 @@
 # Desk Gatekeeper
 
-A human-robot interaction project for the [Reachy Mini](https://www.pollen-robotics.com/reachy-mini/) robot that acts as an intelligent desk guardian. Someone outside your room can ask Reachy whether it's okay to come in — Reachy finds you, reads your response, and reports back over Discord.
+A human-robot interaction project for the [Reachy Mini](https://www.pollen-robotics.com/reachy-mini/) robot that acts as an intelligent desk guardian. Someone outside your room can ask Reachy whether it's okay to come in — Reachy finds you, reads your physical response, and reports back over Discord.
 
 ## Use Case
 
